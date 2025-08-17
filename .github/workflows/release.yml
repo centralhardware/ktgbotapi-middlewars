@@ -61,29 +61,37 @@ jobs:
           echo "is_retag=${IS_RETAG}" >> $GITHUB_OUTPUT
           echo "Derived base_version=$BASE_VERSION from ref=$REF (retag=$IS_RETAG)"
 
-      - name: Delete existing release and tag if retag
+      - name: Delete existing releases and tags if retag
         if: steps.derive.outputs.is_retag == 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
         run: |
           set -euo pipefail
-          BASE="${{ steps.derive.outputs.base_version }}"
-          echo "Attempting to delete existing release $BASE (if any)"
-          gh release delete "$BASE" -y || echo "No existing release $BASE to delete"
-          echo "Checking if tag $BASE exists on remote"
-          if git ls-remote --tags origin | grep -q "refs/tags/$BASE$"; then
-            echo "Deleting remote tag $BASE"
-            git push origin :refs/tags/$BASE || true
-          else
-            echo "No remote tag $BASE to delete"
-          fi
+          BASE="${{ steps.derive.outputs.base_version }}"         # e.g. 1.2.3
+          REF_FULL="${{ steps.derive.outputs.ref_name }}"        # e.g. v1.2.3-1
+          TAG_ORIG="v${BASE}"                                   # e.g. v1.2.3
+
+          echo "Attempting to delete existing releases (if any)"
+          # Delete releases associated with the original and the suffixed tags, if they exist
+          gh release delete "$TAG_ORIG" -y || echo "No existing release $TAG_ORIG to delete"
+          gh release delete "$REF_FULL" -y || echo "No existing release $REF_FULL to delete"
+
+          echo "Checking and deleting remote tags if they exist"
+          for TAG in "$TAG_ORIG" "$REF_FULL"; do
+            if git ls-remote --tags origin | grep -F -q "refs/tags/${TAG}"; then
+              echo "Deleting remote tag ${TAG}"
+              git push origin :refs/tags/${TAG} || true
+            else
+              echo "No remote tag ${TAG} to delete"
+            fi
+          done
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          name: ${{ steps.derive.outputs.base_version }}
-          tag_name: ${{ steps.derive.outputs.base_version }}
+          name: v${{ steps.derive.outputs.base_version }}
+          tag_name: v${{ steps.derive.outputs.base_version }}
           target_commitish: ${{ github.sha }}
           generate_release_notes: true
           files: |
