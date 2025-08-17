@@ -3,6 +3,7 @@ name: Build All Modules
 on:
   push:
     branches: ["**"]
+    tags: ["**"]
   pull_request:
     branches: ["**"]
 
@@ -33,3 +34,19 @@ jobs:
 
       - name: Build (all projects)
         run: ./gradlew --no-daemon build
+
+  trigger-jitpack:
+    name: Trigger JitPack build on tag
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - name: Trigger JitPack build for this tag
+        env:
+          TAG: ${{ github.ref_name }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          echo "Triggering JitPack build for $REPOSITORY:$TAG"
+          URL="https://jitpack.io/com/github/${REPOSITORY}/${TAG}/build.log"
+          echo "GET $URL"
+          # Hitting the build.log endpoint triggers the build for public repositories
+          curl -fsSL "$URL" | head -n 100 || true
