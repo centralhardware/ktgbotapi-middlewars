@@ -37,11 +37,54 @@ jobs:
       - name: Assemble (all projects)
         run: ./gradlew --no-daemon assemble
 
+      - name: Derive release version
+        id: derive
+        shell: bash
+        run: |
+          REF="${GITHUB_REF_NAME}"
+          echo "ref_name=${REF}" >> $GITHUB_OUTPUT
+
+          BASE_VERSION="${REF}"
+          IS_RETAG=false
+
+          if [[ "$REF" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)(-.+)?$ ]]; then
+            # Extract the numeric version without leading 'v'
+            NUM_VER="${BASH_REMATCH[1]}"
+            BASE_VERSION="$NUM_VER"
+            # If there is a suffix (e.g., -2), mark as retag to force recreation
+            if [[ -n "${BASH_REMATCH[2]}" ]]; then
+              IS_RETAG=true
+            fi
+          fi
+
+          echo "base_version=${BASE_VERSION}" >> $GITHUB_OUTPUT
+          echo "is_retag=${IS_RETAG}" >> $GITHUB_OUTPUT
+          echo "Derived base_version=$BASE_VERSION from ref=$REF (retag=$IS_RETAG)"
+
+      - name: Delete existing release and tag if retag
+        if: steps.derive.outputs.is_retag == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE="${{ steps.derive.outputs.base_version }}"
+          echo "Attempting to delete existing release $BASE (if any)"
+          gh release delete "$BASE" -y || echo "No existing release $BASE to delete"
+          echo "Checking if tag $BASE exists on remote"
+          if git ls-remote --tags origin | grep -q "refs/tags/$BASE$"; then
+            echo "Deleting remote tag $BASE"
+            git push origin :refs/tags/$BASE || true
+          else
+            echo "No remote tag $BASE to delete"
+          fi
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          name: ${{ github.ref_name }}
-          tag_name: ${{ github.ref_name }}
+          name: ${{ steps.derive.outputs.base_version }}
+          tag_name: ${{ steps.derive.outputs.base_version }}
+          target_commitish: ${{ github.sha }}
           generate_release_notes: true
           files: |
             **/build/libs/*.jar
