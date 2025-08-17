@@ -1,11 +1,9 @@
 subprojects {
-    // Ensure repositories available for all submodules (safe even if modules define their own)
     repositories {
         mavenCentral()
         maven("https://jitpack.io")
     }
 
-    // Provide a common dependency on ktgbotapi only when Kotlin JVM plugin is applied
     plugins.withId("org.jetbrains.kotlin.jvm") {
         dependencies {
             val ktgbotapiVersion: String = project.findProperty("ktgbotapiVersion") as? String
