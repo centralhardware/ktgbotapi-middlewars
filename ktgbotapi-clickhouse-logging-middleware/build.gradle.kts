@@ -11,7 +11,6 @@ repositories {
 val clickhouseVersion = "0.9.1"
 
 dependencies {
-    implementation("dev.inmo:tgbotapi:28.0.0")
     implementation("com.google.code.gson:gson:2.13.1")
     implementation("org.jetbrains.kotlin:kotlin-reflect")
     implementation("com.clickhouse:clickhouse-jdbc:$clickhouseVersion")

@@ -10,7 +10,6 @@ repositories {
 }
 
 dependencies {
-    implementation("dev.inmo:tgbotapi:28.0.0")
 }
 
 publishing {
