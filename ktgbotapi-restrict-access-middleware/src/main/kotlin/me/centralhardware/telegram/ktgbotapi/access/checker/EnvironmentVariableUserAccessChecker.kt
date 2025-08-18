@@ -5,7 +5,7 @@
  * This implementation reads the "ALLOWED_USERS" environment variable, which should contain
  * a comma-separated list of Telegram user IDs that are allowed to access the bot.
  */
-package me.centralhardware.telegram.ktgbotapi.access.checker
+package me.centralhardware.telegram.middleware
 
 import dev.inmo.kslog.common.KSLog
 import dev.inmo.kslog.common.warning

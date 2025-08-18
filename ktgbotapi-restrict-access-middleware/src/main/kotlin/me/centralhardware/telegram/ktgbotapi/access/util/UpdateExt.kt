@@ -1,7 +1,7 @@
 /**
  * Extension functions for the Update class from the TGBotAPI library.
  */
-package me.centralhardware.telegram.ktgbotapi.access.util
+package me.centralhardware.telegram.middleware
 
 import dev.inmo.tgbotapi.extensions.utils.extensions.raw.from
 import dev.inmo.tgbotapi.types.update.*

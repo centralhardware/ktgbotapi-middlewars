@@ -1,4 +1,4 @@
-package me.centralhardware.telegram
+package me.centralhardware.telegram.middleware
 
 import dev.inmo.kslog.common.KSLog
 import dev.inmo.kslog.common.error

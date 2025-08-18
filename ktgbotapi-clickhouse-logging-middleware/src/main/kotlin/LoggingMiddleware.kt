@@ -1,6 +1,5 @@
-package me.centralhardware.telegram
+package me.centralhardware.telegram.middleware
 
-import com.clickhouse.jdbc.ClickHouseDataSource
 import com.clickhouse.jdbc.DataSourceImpl
 import com.google.gson.Gson
 import dev.inmo.kslog.common.KSLog
