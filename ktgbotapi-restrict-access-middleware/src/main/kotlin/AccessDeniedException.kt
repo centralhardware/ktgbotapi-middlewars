@@ -1,7 +1,6 @@
 /**
  * Exception thrown when a user attempts to access the bot but is not authorized.
  */
-package me.centralhardware.telegram.ktgbotapi.access.exception
 
 /**
  * Exception thrown when a user attempts to access the bot but is not authorized.

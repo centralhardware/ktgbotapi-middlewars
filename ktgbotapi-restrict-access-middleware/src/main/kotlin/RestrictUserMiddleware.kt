@@ -1,7 +1,6 @@
 /**
  * Middleware for restricting access to the bot based on user IDs.
  */
-package me.centralhardware.telegram.ktgbotapi.access.middleware
 
 import dev.inmo.kslog.common.KSLog
 import dev.inmo.kslog.common.info
@@ -10,9 +9,6 @@ import dev.inmo.tgbotapi.bot.ktor.middlewares.TelegramBotMiddlewaresPipelinesHan
 import dev.inmo.tgbotapi.types.update.abstracts.UnknownUpdate
 import dev.inmo.tgbotapi.types.update.abstracts.Update
 import kotlinx.serialization.json.JsonObject
-import me.centralhardware.telegram.ktgbotapi.access.checker.UserAccessChecker
-import me.centralhardware.telegram.ktgbotapi.access.exception.AccessDeniedException
-import me.centralhardware.telegram.ktgbotapi.access.util.chatId
 
 /**
  * Adds a middleware to the bot that restricts access based on user IDs.
