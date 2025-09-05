@@ -1,17 +1,12 @@
-/**
- * Implementation of [UserAccessChecker] that uses environment variables to determine
- * which users have access to the bot.
- *
- * This implementation reads the "ALLOWED_USERS" environment variable, which should contain
- * a comma-separated list of Telegram user IDs that are allowed to access the bot.
- */
-
 import dev.inmo.kslog.common.KSLog
 import dev.inmo.kslog.common.warning
 
 /**
  * Implementation of [UserAccessChecker] that uses environment variables to determine
  * which users have access to the bot.
+ *
+ * This implementation reads the "ALLOWED_USERS" environment variable, which should contain
+ * a comma-separated list of Telegram user IDs that are allowed to access the bot.
  */
 open class EnvironmentVariableUserAccessChecker : UserAccessChecker {
     /**
@@ -46,7 +41,7 @@ open class EnvironmentVariableUserAccessChecker : UserAccessChecker {
     }
 
     /**
-     * Checks if a user with the given ID has access to the bot.
+     * Checks if a user has access to the bot.
      *
      * @param userId The Telegram user ID to check, or null if no user ID is available.
      * @return true if the user has access (either the user ID is in the allowed list or is null),

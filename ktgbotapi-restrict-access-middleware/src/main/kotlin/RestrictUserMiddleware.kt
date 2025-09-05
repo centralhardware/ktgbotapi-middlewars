@@ -1,7 +1,3 @@
-/**
- * Middleware for restricting access to the bot based on user IDs.
- */
-
 import dev.inmo.kslog.common.KSLog
 import dev.inmo.kslog.common.info
 import dev.inmo.micro_utils.common.Warning
@@ -11,7 +7,7 @@ import dev.inmo.tgbotapi.types.update.abstracts.Update
 import kotlinx.serialization.json.JsonObject
 
 /**
- * Adds a middleware to the bot that restricts access based on user IDs.
+ * Adds a middleware to the bot that restricts user access.
  *
  * This middleware intercepts all updates from Telegram and checks if the user who sent the update
  * is allowed to access the bot. If the user is not allowed, the update is replaced with an
@@ -26,15 +22,18 @@ fun TelegramBotMiddlewaresPipelinesHandler.Builder.restrictAccess(
 ) {
     addMiddleware {
         doOnRequestResultPresented { result, _, _, _ ->
-            when {
-                result !is ArrayList<*> -> result
-                result is ArrayList<*> -> {
+            when (result) {
+                !is ArrayList<*> -> result
+                is ArrayList<*> -> {
                     @Suppress("UNCHECKED_CAST")
                     (result as? ArrayList<Update>)?.map { update ->
                         val userId = update.chatId()
-                        val permitted = accessChecker.checkAccess(userId)
-                        
-                        if (permitted) {
+                        if (userId == null) {
+                            KSLog.info("Update type ${update::class.simpleName} does not support")
+                            return@map update
+                        }
+
+                        if (accessChecker.checkAccess(userId)) {
                             update
                         } else {
                             KSLog.info(
@@ -44,6 +43,7 @@ fun TelegramBotMiddlewaresPipelinesHandler.Builder.restrictAccess(
                         }
                     } ?: result
                 }
+
                 else -> result
             }
         }

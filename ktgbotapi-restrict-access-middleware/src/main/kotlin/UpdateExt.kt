@@ -1,7 +1,3 @@
-/**
- * Extension functions for the Update class from the TGBotAPI library.
- */
-
 import dev.inmo.tgbotapi.extensions.utils.extensions.raw.from
 import dev.inmo.tgbotapi.types.update.*
 import dev.inmo.tgbotapi.types.update.abstracts.UnknownUpdate
@@ -20,12 +16,14 @@ fun Update.chatId(): Long? {
         is EditMessageUpdate -> data.from?.id?.chatId?.long
         is MessageUpdate -> data.from?.id?.chatId?.long
         is EditChannelPostUpdate -> data.from?.id?.chatId?.long
-        is ChannelPostUpdate -> null
         is ChosenInlineResultUpdate -> data.from.id.chatId.long
         is InlineQueryUpdate -> data.from.id.chatId.long
         is CallbackQueryUpdate -> data.from.id.chatId.long
         is ShippingQueryUpdate -> data.from.id.chatId.long
         is PreCheckoutQueryUpdate -> data.from.id.chatId.long
+        is BusinessMessageUpdate -> data.from.id.chatId.long
+
+        is ChannelPostUpdate -> null
         is PollUpdate -> null
         is PollAnswerUpdate -> null
         is MyChatMemberUpdatedUpdate -> null
@@ -36,7 +34,6 @@ fun Update.chatId(): Long? {
         is ChatBoostUpdatedUpdate -> null
         is ChatBoostRemovedUpdate -> null
         is BusinessConnectionUpdate -> null
-        is BusinessMessageUpdate -> data.from.id.chatId.long
         is EditBusinessMessageUpdate -> null
         is DeletedBusinessMessageUpdate -> null
         is PaidMediaPurchasedUpdate -> null
