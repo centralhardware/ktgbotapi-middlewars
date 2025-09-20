@@ -12,12 +12,11 @@ subprojects {
     apply(plugin = "maven-publish")
     apply(plugin = "org.jetbrains.kotlin.jvm")
 
-    // Set group and version centrally (with an override for a specific module)
     group = "me.centralhardware.telegram.middleware"
     version = "1.0-SNAPSHOT"
 
     dependencies {
-        add("implementation", "dev.inmo:tgbotapi:28.0.0")
+        add("implementation", "dev.inmo:tgbotapi:28.0.2")
         add("implementation", "dev.inmo:kslog:1.5.0")
     }
 
