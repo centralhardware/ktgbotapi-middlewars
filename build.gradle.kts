@@ -16,7 +16,7 @@ subprojects {
     version = "1.0-SNAPSHOT"
 
     dependencies {
-        add("implementation", "dev.inmo:tgbotapi:28.0.2")
+        add("implementation", "dev.inmo:tgbotapi:29.0.0")
         add("implementation", "dev.inmo:kslog:1.5.0")
     }
 
