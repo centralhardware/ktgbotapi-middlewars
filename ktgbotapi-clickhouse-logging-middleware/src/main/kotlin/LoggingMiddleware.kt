@@ -30,7 +30,7 @@ private data class UserInteraction(
  * SQL query for inserting interaction statistics
  */
 private const val INSERT_QUERY = """
-    INSERT INTO bot_interactions
+    INSERT INTO bot_log.bot_interactions
     (date, user_id, username, first_name,last_name, interactions, app_name)
     VALUES
     (:date, :user_id, :username, :first_name, :last_name, 1, :app_name)
