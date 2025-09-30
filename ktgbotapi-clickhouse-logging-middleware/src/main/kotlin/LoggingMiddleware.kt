@@ -5,7 +5,6 @@ import dev.inmo.kslog.common.KSLog
 import dev.inmo.kslog.common.info
 import dev.inmo.micro_utils.common.Warning
 import dev.inmo.tgbotapi.bot.ktor.middlewares.TelegramBotMiddlewaresPipelinesHandler
-import dev.inmo.tgbotapi.extensions.utils.extensions.raw.from
 import dev.inmo.tgbotapi.types.chat.User
 import dev.inmo.tgbotapi.types.update.abstracts.Update
 import kotliquery.queryOf
@@ -84,13 +83,13 @@ private fun saveInteraction(date: LocalDateTime,
  */
 private fun Update.extractUserInfo(): User? {
     return when (this) {
-        is dev.inmo.tgbotapi.types.update.MessageUpdate -> data.from
-        is dev.inmo.tgbotapi.types.update.EditMessageUpdate -> data.from
-        is dev.inmo.tgbotapi.types.update.CallbackQueryUpdate -> data.from
+        is dev.inmo.tgbotapi.types.update.MessageUpdate -> data.user
+        is dev.inmo.tgbotapi.types.update.EditMessageUpdate -> data.user
+        is dev.inmo.tgbotapi.types.update.CallbackQueryUpdate -> data.user
         is dev.inmo.tgbotapi.types.update.InlineQueryUpdate -> data.from
-        is dev.inmo.tgbotapi.types.update.ChosenInlineResultUpdate -> data.from
-        is dev.inmo.tgbotapi.types.update.ShippingQueryUpdate -> data.from
-        is dev.inmo.tgbotapi.types.update.PreCheckoutQueryUpdate -> data.from
+        is dev.inmo.tgbotapi.types.update.ChosenInlineResultUpdate -> data.user
+        is dev.inmo.tgbotapi.types.update.ShippingQueryUpdate -> data.user
+        is dev.inmo.tgbotapi.types.update.PreCheckoutQueryUpdate -> data.user
         is dev.inmo.tgbotapi.types.update.PollAnswerUpdate -> data.user
         is dev.inmo.tgbotapi.types.update.MyChatMemberUpdatedUpdate -> data.user
         is dev.inmo.tgbotapi.types.update.CommonChatMemberUpdatedUpdate -> data.user
@@ -108,30 +107,22 @@ private fun Update.extractUserInfo(): User? {
 @OptIn(Warning::class)
 fun TelegramBotMiddlewaresPipelinesHandler.Builder.clickhouseLogging(appName: String) {
     addMiddleware {
-        doOnRequestResultPresented { result, _, _, _ ->
-            when (result) {
-                is ArrayList<*> -> {
-                    @Suppress("UNCHECKED_CAST")
-                    (result as? ArrayList<Update>)?.forEach { update ->
-                        runCatching {
-                            update.extractUserInfo()?.let {
-                                saveInteraction(
-                                    LocalDateTime.now(),
-                                    it.id.chatId.long,
-                                    it.username?.username ?: "",
-                                    it.firstName,
-                                    it.lastName,
-                                    appName
-                                )
-                            }
-                        }.onFailure { e ->
-                            KSLog.info("Failed to record interaction: ${e.message}")
-                        }
-                    }
-                    result
+        doOnUpdate { update ->
+            runCatching {
+                update.extractUserInfo()?.let {
+                    saveInteraction(
+                        LocalDateTime.now(),
+                        it.id.chatId.long,
+                        it.username?.username ?: "",
+                        it.firstName,
+                        it.lastName,
+                        appName
+                    )
                 }
-                else -> result
+            }.onFailure { e ->
+                KSLog.info("Failed to record interaction: ${e.message}")
             }
+            null
         }
     }
 
