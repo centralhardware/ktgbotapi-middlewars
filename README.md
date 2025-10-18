@@ -77,33 +77,3 @@ includeMiddlewares {
 ```
 
 Most update types are logged. For each, a human-readable message like "<who> - <what>" is produced.
-
-### 3) Logging to ClickHouse
-
-Core parts:
-- `clickhouseLogging(appName: String)` — an extension that logs outgoing requests and incoming responses.
-
-Environment variables:
-- `CLICKHOUSE_URL` — JDBC URL for ClickHouse, e.g. `jdbc:ch://clickhouse-host:8123/default`.
-- `HOST` — optional, host name for logs; if not set, the system host name is used.
-
-Expected table schema: `bot_log.bot_log` with columns:
-- `date_time` DateTime
-- `appName` String
-- `type` String — "IN" or "OUT"
-- `data` String — JSON
-- `className` String
-- `host` String
-
-Example:
-
-```kotlin
-includeMiddlewares {
-    clickhouseLogging(appName = "my-telegram-bot")
-}
-```
-
-Notes:
-- Requests of types `GetUpdates`, `DeleteWebhook`, `GetMe` are not logged.
-- For `GetUpdates`, the result (list of updates) is logged item by item.
-- Binary responses (`ByteArray`) are not stored.
