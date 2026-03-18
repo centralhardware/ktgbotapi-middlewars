@@ -24,7 +24,8 @@ fun TelegramBotMiddlewaresPipelinesHandler.Builder.restrictAccess(
         doOnRequestResultPresented { result, _, _, _ ->
             when (result) {
                 !is ArrayList<*> -> result
-                is ArrayList<*> -> {
+
+                else -> {
                     @Suppress("UNCHECKED_CAST")
                     (result as? ArrayList<Update>)?.map { update ->
                         val userId = update.chatId()
@@ -43,8 +44,6 @@ fun TelegramBotMiddlewaresPipelinesHandler.Builder.restrictAccess(
                         }
                     } ?: result
                 }
-
-                else -> result
             }
         }
     }
