@@ -77,3 +77,40 @@ includeMiddlewares {
 ```
 
 Most update types are logged. For each, a human-readable message like "<who> - <what>" is produced.
+
+### 3) Logging to ClickHouse
+
+Core parts:
+- `clickHouseLogging(botName)` — middleware that writes one row per Telegram API call to the `bot_requests` table.
+- `clickHouseRequestIdContext()` — `subcontextInitialAction` that auto-tags every API call done while handling an Update with that update's `request_id`, so the incoming row and all outgoing rows triggered by it share one id.
+- `clickHouseExceptionsHandler(botName)` — `defaultExceptionsHandler` that writes a row for every exception from a behaviour handler (catches things the HTTP middleware can't see, e.g. local validation in request constructors).
+
+Environment variable:
+- `CLICKHOUSE_JDBC_URL` (required unless `jdbcUrl` is passed explicitly) — full JDBC URL, e.g. `jdbc:clickhouse://host:8123/db?user=default&password=secret`.
+
+The schema is shipped as a Flyway-style migration at `ktgbotapi-clickhouse-logging-middleware/src/main/resources/db/migration/V1__create_bot_requests.sql`. Apply it with Flyway, `clickhouse-client`, or copy-paste it manually before enabling the middleware.
+
+Example:
+
+```kotlin
+telegramBotWithBehaviourAndLongPolling(
+    token = token,
+    builder = { includeMiddlewares { clickHouseLogging(botName = "my_bot") } },
+    subcontextInitialAction = clickHouseRequestIdContext(),
+    defaultExceptionsHandler = clickHouseExceptionsHandler(botName = "my_bot"),
+) {
+    onCommand("multi") {
+        reply(it, "step 1")          // request_id X
+        sendMessage(it.chat, "two")  // request_id X
+        sendMessage(it.chat, "tre")  // request_id X
+    }
+}
+```
+
+`SELECT * FROM bot_requests WHERE request_id = '<uuid>'` returns the full trace of one interaction (incoming Update + every outgoing API call it spawned).
+
+Behavior:
+- One row per Telegram API call, written synchronously.
+- `GetUpdates` itself is never logged; on success its result is decomposed into one row per incoming `Update`.
+- Server-side errors (Telegram returns 4xx/5xx) populate `success=false` and `error`.
+- A working end-to-end example lives in the `test-bot` module.
