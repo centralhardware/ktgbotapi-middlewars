@@ -7,9 +7,26 @@ import dev.inmo.micro_utils.common.Warning
 import dev.inmo.tgbotapi.bot.ktor.middlewares.TelegramBotMiddlewaresPipelinesHandler
 import dev.inmo.tgbotapi.extensions.behaviour_builder.BehaviourContext
 import dev.inmo.tgbotapi.extensions.behaviour_builder.CustomBehaviourContextAndTypeReceiver
+import dev.inmo.tgbotapi.extensions.utils.extensions.raw.from
 import dev.inmo.tgbotapi.requests.GetUpdates
 import dev.inmo.tgbotapi.requests.abstracts.Request
+import dev.inmo.tgbotapi.types.chat.User
+import dev.inmo.tgbotapi.types.update.BusinessConnectionUpdate
+import dev.inmo.tgbotapi.types.update.BusinessMessageUpdate
+import dev.inmo.tgbotapi.types.update.CallbackQueryUpdate
+import dev.inmo.tgbotapi.types.update.ChatJoinRequestUpdate
+import dev.inmo.tgbotapi.types.update.ChosenInlineResultUpdate
+import dev.inmo.tgbotapi.types.update.CommonChatMemberUpdatedUpdate
+import dev.inmo.tgbotapi.types.update.EditBusinessMessageUpdate
+import dev.inmo.tgbotapi.types.update.EditMessageUpdate
+import dev.inmo.tgbotapi.types.update.InlineQueryUpdate
+import dev.inmo.tgbotapi.types.update.MessageUpdate
+import dev.inmo.tgbotapi.types.update.MyChatMemberUpdatedUpdate
+import dev.inmo.tgbotapi.types.update.PaidMediaPurchasedUpdate
+import dev.inmo.tgbotapi.types.update.PreCheckoutQueryUpdate
+import dev.inmo.tgbotapi.types.update.ShippingQueryUpdate
 import dev.inmo.tgbotapi.types.update.abstracts.Update
+import dev.inmo.tgbotapi.utils.RiskFeature
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -19,25 +36,77 @@ import kotlinx.coroutines.launch
 import java.sql.DriverManager
 import java.sql.Timestamp
 import java.time.Instant
-import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.coroutines.coroutineContext
 
 private const val PENDING_TTL_MS = 60_000L
 private const val MAX_PENDING = 10_000
 
-private val pendingRequestIds = ConcurrentHashMap<Long, String>()
-private val jobToRequestId = ConcurrentHashMap<Job, String>()
+private data class UpdateContext(
+    val updateId: Long,
+    val userId: Long,
+    val username: String,
+    val firstName: String,
+    val lastName: String,
+) {
+    companion object {
+        val EMPTY = UpdateContext(0L, 0L, "", "", "")
+
+        fun from(updateId: Long, user: User?): UpdateContext = UpdateContext(
+            updateId = updateId,
+            userId = user?.id?.chatId?.long ?: 0L,
+            username = user?.username?.withoutAt.orEmpty(),
+            firstName = user?.firstName.orEmpty(),
+            lastName = user?.lastName.orEmpty(),
+        )
+    }
+}
+
+// Distributed-safe unique id via ClickHouse's built-in Snowflake generator (timestamp_ms +
+// machine_id + intra-ms counter). Available since ClickHouse 23.6. Each call returns a fresh id
+// regardless of how many bot instances share the database.
+private fun nextUpdateId(jdbcUrl: String): Long = runCatching {
+    DriverManager.getConnection(jdbcUrl).use { conn ->
+        conn.prepareStatement("SELECT generateSnowflakeID()").use { ps ->
+            ps.executeQuery().use { rs -> if (rs.next()) rs.getLong(1) else 0L }
+        }
+    }
+}.getOrElse {
+    KSLog.error("Failed to fetch next update_id", it)
+    0L
+}
+
+@OptIn(Warning::class, RiskFeature::class)
+private fun Update.extractUser(): User? = when (this) {
+    is MessageUpdate -> data.from
+    is EditMessageUpdate -> data.from
+    is InlineQueryUpdate -> data.from
+    is CallbackQueryUpdate -> data.from
+    is ChosenInlineResultUpdate -> data.from
+    is ShippingQueryUpdate -> data.from
+    is PreCheckoutQueryUpdate -> data.from
+    is BusinessMessageUpdate -> data.from
+    is EditBusinessMessageUpdate -> data.from
+    is MyChatMemberUpdatedUpdate -> data.user
+    is CommonChatMemberUpdatedUpdate -> data.user
+    is ChatJoinRequestUpdate -> data.user
+    is BusinessConnectionUpdate -> data.user
+    is PaidMediaPurchasedUpdate -> data.from
+    else -> null
+}
+
+private val pendingContexts = ConcurrentHashMap<Long, UpdateContext>()
+private val jobToContext = ConcurrentHashMap<Job, UpdateContext>()
 private val cleanupScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
-private fun rememberPending(updateId: Long, requestId: String) {
-    if (pendingRequestIds.size >= MAX_PENDING) {
-        pendingRequestIds.keys.firstOrNull()?.let { pendingRequestIds.remove(it) }
+private fun rememberPending(updateId: Long, ctx: UpdateContext) {
+    if (pendingContexts.size >= MAX_PENDING) {
+        pendingContexts.keys.firstOrNull()?.let { pendingContexts.remove(it) }
     }
-    pendingRequestIds[updateId] = requestId
+    pendingContexts[updateId] = ctx
     cleanupScope.launch {
         delay(PENDING_TTL_MS)
-        pendingRequestIds.remove(updateId, requestId)
+        pendingContexts.remove(updateId, ctx)
     }
 }
 
@@ -49,12 +118,12 @@ private fun Job.containsDescendant(target: Job): Boolean {
     return false
 }
 
-private fun currentRequestId(currentJob: Job?): String {
-    if (currentJob == null) return ""
-    for ((parent, requestId) in jobToRequestId) {
-        if (parent.containsDescendant(currentJob)) return requestId
+private fun currentContext(currentJob: Job?): UpdateContext {
+    if (currentJob == null) return UpdateContext.EMPTY
+    for ((parent, ctx) in jobToContext) {
+        if (parent.containsDescendant(currentJob)) return ctx
     }
-    return ""
+    return UpdateContext.EMPTY
 }
 
 private fun loadDriver() {
@@ -64,7 +133,7 @@ private fun loadDriver() {
 private fun writeRow(
     jdbcUrl: String,
     botName: String,
-    requestId: String,
+    ctx: UpdateContext,
     method: String,
     request: String,
     response: String,
@@ -75,18 +144,24 @@ private fun writeRow(
     runCatching {
         DriverManager.getConnection(jdbcUrl).use { conn ->
             conn.prepareStatement(
-                "INSERT INTO bot_requests (timestamp, bot, request_id, method, request, response, success, error, duration_ms) " +
-                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                "INSERT INTO bot_requests " +
+                    "(timestamp, bot, update_id, user_id, username, first_name, last_name, " +
+                    "method, request, response, success, error, duration_ms) " +
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
             ).use { ps ->
                 ps.setTimestamp(1, Timestamp.from(Instant.now()))
                 ps.setString(2, botName)
-                ps.setString(3, requestId)
-                ps.setString(4, method)
-                ps.setString(5, request)
-                ps.setString(6, response)
-                ps.setBoolean(7, success)
-                ps.setString(8, error)
-                ps.setLong(9, durationMs)
+                ps.setLong(3, ctx.updateId)
+                ps.setLong(4, ctx.userId)
+                ps.setString(5, ctx.username)
+                ps.setString(6, ctx.firstName)
+                ps.setString(7, ctx.lastName)
+                ps.setString(8, method)
+                ps.setString(9, request)
+                ps.setString(10, response)
+                ps.setBoolean(11, success)
+                ps.setString(12, error)
+                ps.setLong(13, durationMs)
                 ps.executeUpdate()
             }
         }
@@ -96,18 +171,21 @@ private fun writeRow(
 /**
  * Install via `telegramBotWithBehaviourAndLongPolling(subcontextInitialAction = ...)` to auto-tag
  * every Telegram API call performed while handling an incoming `Update` with that update's
- * `request_id`, so handler code doesn't need to know about it.
+ * internal `update_id` and originating user, so handler code doesn't need to know about it.
  */
-fun clickHouseRequestIdContext(): CustomBehaviourContextAndTypeReceiver<BehaviourContext, Unit, Update> =
+fun clickHouseRequestIdContext(
+    jdbcUrl: String = System.getenv("CLICKHOUSE_JDBC_URL")
+        ?: error("CLICKHOUSE_JDBC_URL env var is not set"),
+): CustomBehaviourContextAndTypeReceiver<BehaviourContext, Unit, Update> =
     { update: Update ->
         // get(), not remove(): one Update can match several triggers (e.g. onCommand + onText) and
         // each invokes subcontextInitialAction independently — they must all see the same id.
-        val requestId = pendingRequestIds[update.updateId.long]
-            ?: UUID.randomUUID().toString()
+        val ctx = pendingContexts[update.updateId.long]
+            ?: UpdateContext.from(nextUpdateId(jdbcUrl), update.extractUser())
         val job = coroutineContext[Job]
         if (job != null) {
-            jobToRequestId[job] = requestId
-            job.invokeOnCompletion { jobToRequestId.remove(job) }
+            jobToContext[job] = ctx
+            job.invokeOnCompletion { jobToContext.remove(job) }
         }
     }
 
@@ -143,12 +221,15 @@ fun TelegramBotMiddlewaresPipelinesHandler.Builder.clickHouseLogging(
                 request is GetUpdates -> {
                     if (response is List<*>) {
                         response.filterIsInstance<Update>().forEach { update ->
-                            val requestId = UUID.randomUUID().toString()
-                            rememberPending(update.updateId.long, requestId)
+                            val ctx = UpdateContext.from(
+                                updateId = nextUpdateId(jdbcUrl),
+                                user = update.extractUser(),
+                            )
+                            rememberPending(update.updateId.long, ctx)
                             writeRow(
                                 jdbcUrl,
                                 botName = botName,
-                                requestId = requestId,
+                                ctx = ctx,
                                 method = update::class.simpleName.orEmpty(),
                                 request = update.updateId.toString(),
                                 response = update.toString(),
@@ -165,7 +246,7 @@ fun TelegramBotMiddlewaresPipelinesHandler.Builder.clickHouseLogging(
                     writeRow(
                         jdbcUrl,
                         botName = botName,
-                        requestId = currentRequestId(coroutineContext[Job]),
+                        ctx = currentContext(coroutineContext[Job]),
                         method = request::class.simpleName.orEmpty(),
                         request = request.toString(),
                         response = response?.toString().orEmpty(),
@@ -195,7 +276,7 @@ fun clickHouseExceptionsHandler(
         writeRow(
             jdbcUrl,
             botName = botName,
-            requestId = currentRequestId(coroutineContext[Job]),
+            ctx = currentContext(coroutineContext[Job]),
             method = throwable::class.simpleName.orEmpty(),
             request = "",
             response = "",
