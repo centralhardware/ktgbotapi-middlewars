@@ -15,7 +15,7 @@ import me.centralhardware.telegram.middleware.clickHouseRequestIdContext
 
 /**
  * Required env vars: TELEGRAM_TOKEN, CLICKHOUSE_JDBC_URL.
- * Apply migration once: ktgbotapi-clickhouse-logging-middleware/src/main/resources/db/migration/V1__create_bot_requests.sql
+ * Apply migration once: ktgbotapi-clickhouse-logging-middleware/db/migration/V1__create_bot_requests.sql
  */
 @OptIn(Warning::class)
 fun main(): Unit = runBlocking {

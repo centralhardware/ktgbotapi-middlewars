@@ -88,7 +88,7 @@ Core parts:
 Environment variable:
 - `CLICKHOUSE_JDBC_URL` (required unless `jdbcUrl` is passed explicitly) — full JDBC URL, e.g. `jdbc:clickhouse://host:8123/db?user=default&password=secret`.
 
-The schema is shipped as a Flyway-style migration at `ktgbotapi-clickhouse-logging-middleware/src/main/resources/db/migration/V1__create_bot_requests.sql`. Apply it with Flyway, `clickhouse-client`, or copy-paste it manually before enabling the middleware.
+The schema is shipped as a Flyway-style migration at `ktgbotapi-clickhouse-logging-middleware/db/migration/V1__create_bot_requests.sql`. Apply it with Flyway, `clickhouse-client`, or copy-paste it manually before enabling the middleware.
 
 Example:
 

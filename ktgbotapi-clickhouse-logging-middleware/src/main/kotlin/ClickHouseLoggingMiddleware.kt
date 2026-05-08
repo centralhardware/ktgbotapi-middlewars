@@ -197,7 +197,7 @@ fun clickHouseRequestIdContext(
  * incoming `Update`. Pair with [clickHouseRequestIdContext] for incoming-to-outgoing correlation
  * and [clickHouseExceptionsHandler] for exceptions thrown before the HTTP layer.
  *
- * Schema lives in `src/main/resources/db/migration/V1__create_bot_requests.sql`.
+ * Schema lives in `db/migration/V1__create_bot_requests.sql`.
  */
 @OptIn(Warning::class)
 fun TelegramBotMiddlewaresPipelinesHandler.Builder.clickHouseLogging(
