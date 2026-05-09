@@ -126,6 +126,19 @@ private fun currentContext(currentJob: Job?): UpdateContext {
     return UpdateContext.EMPTY
 }
 
+// Updates consumed by `wait*` calls inside an existing handler don't trigger a new
+// subcontext, so they bypass `clickHouseRequestIdContext`. We detect this by user: if
+// any active handler context already exists for the same user, the new update is
+// almost certainly part of that wait chain — reuse its id so the whole chain
+// (incoming rows + outgoing requests) shares one update_id in ClickHouse.
+private fun activeContextForUser(userId: Long): UpdateContext? {
+    if (userId == 0L) return null
+    for ((job, ctx) in jobToContext) {
+        if (ctx.userId == userId && job.isActive) return ctx
+    }
+    return null
+}
+
 private fun loadDriver() {
     runCatching { Class.forName("com.clickhouse.jdbc.ClickHouseDriver") }
 }
@@ -221,10 +234,13 @@ fun TelegramBotMiddlewaresPipelinesHandler.Builder.clickHouseLogging(
                 request is GetUpdates -> {
                     if (response is List<*>) {
                         response.filterIsInstance<Update>().forEach { update ->
-                            val ctx = UpdateContext.from(
-                                updateId = nextUpdateId(jdbcUrl),
-                                user = update.extractUser(),
-                            )
+                            val user = update.extractUser()
+                            val userId = user?.id?.chatId?.long ?: 0L
+                            val ctx = activeContextForUser(userId)
+                                ?: UpdateContext.from(
+                                    updateId = nextUpdateId(jdbcUrl),
+                                    user = user,
+                                )
                             rememberPending(update.updateId.long, ctx)
                             writeRow(
                                 jdbcUrl,
