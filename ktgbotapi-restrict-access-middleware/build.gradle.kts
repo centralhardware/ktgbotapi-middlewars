@@ -4,7 +4,7 @@ plugins {
 }
 
 dependencies {
-    implementation("dev.inmo:tgbotapi:33.0.0")
+    implementation("dev.inmo:tgbotapi:33.1.0")
     implementation("dev.inmo:kslog:1.6.1")
 }
 
