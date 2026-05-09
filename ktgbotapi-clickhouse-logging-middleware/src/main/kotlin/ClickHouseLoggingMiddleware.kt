@@ -9,20 +9,31 @@ import dev.inmo.tgbotapi.extensions.behaviour_builder.BehaviourContext
 import dev.inmo.tgbotapi.extensions.behaviour_builder.CustomBehaviourContextAndTypeReceiver
 import dev.inmo.tgbotapi.extensions.utils.extensions.raw.from
 import dev.inmo.tgbotapi.requests.GetUpdates
+import dev.inmo.tgbotapi.requests.abstracts.MultipartRequest
 import dev.inmo.tgbotapi.requests.abstracts.Request
+import dev.inmo.tgbotapi.requests.abstracts.SimpleRequest
+import dev.inmo.tgbotapi.utils.toJsonWithoutNulls
+import kotlinx.serialization.SerializationStrategy
 import dev.inmo.tgbotapi.types.chat.User
 import dev.inmo.tgbotapi.types.update.BusinessConnectionUpdate
 import dev.inmo.tgbotapi.types.update.BusinessMessageUpdate
 import dev.inmo.tgbotapi.types.update.CallbackQueryUpdate
+import dev.inmo.tgbotapi.types.update.ChannelPostUpdate
+import dev.inmo.tgbotapi.types.update.ChatBoostRemovedUpdate
+import dev.inmo.tgbotapi.types.update.ChatBoostUpdatedUpdate
 import dev.inmo.tgbotapi.types.update.ChatJoinRequestUpdate
+import dev.inmo.tgbotapi.types.update.ChatMessageReactionUpdatedUpdate
 import dev.inmo.tgbotapi.types.update.ChosenInlineResultUpdate
 import dev.inmo.tgbotapi.types.update.CommonChatMemberUpdatedUpdate
 import dev.inmo.tgbotapi.types.update.EditBusinessMessageUpdate
+import dev.inmo.tgbotapi.types.update.EditChannelPostUpdate
 import dev.inmo.tgbotapi.types.update.EditMessageUpdate
 import dev.inmo.tgbotapi.types.update.InlineQueryUpdate
+import dev.inmo.tgbotapi.types.update.ManagedBotUpdate
 import dev.inmo.tgbotapi.types.update.MessageUpdate
 import dev.inmo.tgbotapi.types.update.MyChatMemberUpdatedUpdate
 import dev.inmo.tgbotapi.types.update.PaidMediaPurchasedUpdate
+import dev.inmo.tgbotapi.types.update.PollAnswerUpdate
 import dev.inmo.tgbotapi.types.update.PreCheckoutQueryUpdate
 import dev.inmo.tgbotapi.types.update.ShippingQueryUpdate
 import dev.inmo.tgbotapi.types.update.abstracts.Update
@@ -80,6 +91,8 @@ private fun nextUpdateId(jdbcUrl: String): Long = runCatching {
 private fun Update.extractUser(): User? = when (this) {
     is MessageUpdate -> data.from
     is EditMessageUpdate -> data.from
+    is ChannelPostUpdate -> data.from
+    is EditChannelPostUpdate -> data.from
     is InlineQueryUpdate -> data.from
     is CallbackQueryUpdate -> data.from
     is ChosenInlineResultUpdate -> data.from
@@ -92,7 +105,12 @@ private fun Update.extractUser(): User? = when (this) {
     is ChatJoinRequestUpdate -> data.user
     is BusinessConnectionUpdate -> data.user
     is PaidMediaPurchasedUpdate -> data.from
-    else -> null
+    is PollAnswerUpdate -> data.user
+    is ChatMessageReactionUpdatedUpdate -> data.reactedUser
+    is ChatBoostUpdatedUpdate -> data.boost.source.user
+    is ChatBoostRemovedUpdate -> data.source.user
+    is ManagedBotUpdate -> data.user
+    else -> null  // PollUpdate, ChatMessageReactionsCountUpdatedUpdate, DeletedBusinessMessageUpdate, UnknownUpdate, RawUpdate — no associated user
 }
 
 private val pendingContexts = ConcurrentHashMap<Long, UpdateContext>()
@@ -141,6 +159,19 @@ private fun activeContextForUser(userId: Long): UpdateContext? {
 
 private fun loadDriver() {
     runCatching { Class.forName("com.clickhouse.jdbc.ClickHouseDriver") }
+}
+
+@Suppress("UNCHECKED_CAST")
+private fun Request<*>.asJson(): String {
+    if (this::class.isData) return toString()
+    return runCatching {
+        when (this) {
+            is MultipartRequest.Common<*> -> paramsJson.toString()
+            is MultipartRequest<*> -> paramsJson.toString()
+            is SimpleRequest<*> -> toJsonWithoutNulls(requestSerializer as SerializationStrategy<Request<*>>).toString()
+            else -> toString()
+        }
+    }.getOrElse { toString() }
 }
 
 private fun writeRow(
@@ -263,8 +294,8 @@ fun TelegramBotMiddlewaresPipelinesHandler.Builder.clickHouseLogging(
                         jdbcUrl,
                         botName = botName,
                         ctx = currentContext(coroutineContext[Job]),
-                        method = request::class.simpleName.orEmpty(),
-                        request = request.toString(),
+                        method = request.method(),
+                        request = request.asJson(),
                         response = response?.toString().orEmpty(),
                         success = result.isSuccess,
                         error = throwable?.toString().orEmpty(),
