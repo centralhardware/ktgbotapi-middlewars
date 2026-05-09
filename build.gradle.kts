@@ -11,3 +11,4 @@ subprojects {
     group = "me.centralhardware.telegram.middleware"
     version = "1.0-SNAPSHOT"
 }
+
